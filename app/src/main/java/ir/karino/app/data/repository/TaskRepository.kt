@@ -46,7 +46,11 @@ class TaskRepository @Inject constructor(
     suspend fun save(draft: TaskDraft): TaskEntity {
         require(draft.title.isNotBlank()) { "عنوان کار نمی‌تواند خالی باشد." }
         val now = System.currentTimeMillis()
-        val existing = draft.id.takeIf { it > 0 }?.let(taskDao::getById)
+        val existing: TaskEntity? = if (draft.id > 0) {
+            taskDao.getById(draft.id)
+        } else {
+            null
+        }
         val task = if (existing == null) {
             TaskEntity(
                 title = draft.title.trim(),
