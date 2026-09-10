@@ -17,12 +17,16 @@ import ir.karino.app.util.isSameLocalDay
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -41,8 +45,6 @@ data class KarinoUiState(
     val query: String = "",
     val filter: TaskFilter = TaskFilter.TODAY,
     val selectedCategoryId: Long? = null,
-    val todayTotal: Int = 0,
-    val todayDone: Int = 0,
     val activeCount: Int = 0,
     val completedCount: Int = 0,
     val weeklyCompletion: List<DayCompletion> = emptyList(),
@@ -59,6 +61,19 @@ private data class Controls(
     val query: String,
     val filter: TaskFilter,
     val selectedCategoryId: Long?,
+)
+
+private data class TaskSummary(
+    val activeCount: Int,
+    val completedCount: Int,
+    val weeklyCompletion: List<DayCompletion>,
+)
+
+private data class PreparedSource(
+    val source: SourceData,
+    val today: LocalDate,
+    val zone: ZoneId,
+    val summary: TaskSummary,
 )
 
 @HiltViewModel
@@ -85,13 +100,28 @@ class MainViewModel @Inject constructor(
         Controls(query.trim(), filter, categoryId)
     }
 
-    val uiState = combine(source, controls) { source, controls ->
-        buildUiState(source, controls)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = KarinoUiState(),
-    )
+    private val preparedSource = source
+        .map { source ->
+            val zone = ZoneId.systemDefault()
+            val today = LocalDate.now(zone)
+            PreparedSource(
+                source = source,
+                today = today,
+                zone = zone,
+                summary = summarizeTasks(source.tasks, today, zone),
+            )
+        }
+        .flowOn(Dispatchers.Default)
+
+    val uiState = combine(preparedSource, controls) { prepared, controls ->
+        buildUiState(prepared, controls)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = KarinoUiState(),
+        )
 
     init {
         viewModelScope.launch { taskRepository.ensureDefaultCategories() }
@@ -196,17 +226,18 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun buildUiState(source: SourceData, controls: Controls): KarinoUiState {
+    private fun buildUiState(prepared: PreparedSource, controls: Controls): KarinoUiState {
+        val source = prepared.source
         val now = System.currentTimeMillis()
-        val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone)
-        val normalizedQuery = controls.query.lowercase()
+        val zone = prepared.zone
+        val today = prepared.today
+        val hasQuery = controls.query.isNotEmpty()
 
         val visible = source.tasks.asSequence()
             .filter { task ->
-                normalizedQuery.isBlank() ||
-                    task.title.lowercase().contains(normalizedQuery) ||
-                    task.note.lowercase().contains(normalizedQuery)
+                !hasQuery ||
+                    task.title.contains(controls.query, ignoreCase = true) ||
+                    task.note.contains(controls.query, ignoreCase = true)
             }
             .filter { task ->
                 controls.selectedCategoryId == null || task.categoryId == controls.selectedCategoryId
@@ -233,42 +264,8 @@ class MainViewModel @Inject constructor(
                     TaskFilter.COMPLETED -> task.isCompleted
                 }
             }
-            .sortedWith(
-                compareBy<TaskEntity> { it.isCompleted }
-                    .thenByDescending { it.priority.ordinal }
-                    .thenBy { it.dueAt ?: Long.MAX_VALUE }
-                    .thenBy { it.sortOrder },
-            )
+            .sortedWith(TASK_COMPARATOR)
             .toList()
-
-        val todayTasks = source.tasks.filter { task ->
-            val dueDate = task.dueAt?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
-            if (task.isCompleted) {
-                task.completedAt?.isSameLocalDay(now, zone) == true || dueDate == today
-            } else {
-                dueDate == null || !dueDate.isAfter(today)
-            }
-        }
-        val weekDays = (6 downTo 0).map { offset -> today.minusDays(offset.toLong()) }
-        val weekdayLabels = mapOf(
-            java.time.DayOfWeek.SATURDAY to "ش",
-            java.time.DayOfWeek.SUNDAY to "ی",
-            java.time.DayOfWeek.MONDAY to "د",
-            java.time.DayOfWeek.TUESDAY to "س",
-            java.time.DayOfWeek.WEDNESDAY to "چ",
-            java.time.DayOfWeek.THURSDAY to "پ",
-            java.time.DayOfWeek.FRIDAY to "ج",
-        )
-        val weekly = weekDays.map { date ->
-            DayCompletion(
-                label = weekdayLabels.getValue(date.dayOfWeek),
-                count = source.tasks.count { task ->
-                    task.completedAt?.let {
-                        Instant.ofEpochMilli(it).atZone(zone).toLocalDate() == date
-                    } == true
-                },
-            )
-        }
 
         return KarinoUiState(
             tasks = visible,
@@ -278,16 +275,64 @@ class MainViewModel @Inject constructor(
             query = controls.query,
             filter = controls.filter,
             selectedCategoryId = controls.selectedCategoryId,
-            todayTotal = todayTasks.size,
-            todayDone = todayTasks.count(TaskEntity::isCompleted),
-            activeCount = source.tasks.count { !it.isCompleted },
-            completedCount = source.tasks.count(TaskEntity::isCompleted),
-            weeklyCompletion = weekly,
+            activeCount = prepared.summary.activeCount,
+            completedCount = prepared.summary.completedCount,
+            weeklyCompletion = prepared.summary.weeklyCompletion,
             dailyQuote = QUOTES[today.dayOfYear % QUOTES.size],
         )
     }
 
+    private fun summarizeTasks(
+        tasks: List<TaskEntity>,
+        today: LocalDate,
+        zone: ZoneId,
+    ): TaskSummary {
+        val firstDay = today.minusDays(6)
+        val weeklyCounts = IntArray(7)
+        var activeCount = 0
+        var completedCount = 0
+
+        tasks.forEach { task ->
+            if (task.isCompleted) {
+                completedCount++
+                task.completedAt?.let { completedAt ->
+                    val completedDate = Instant.ofEpochMilli(completedAt)
+                        .atZone(zone)
+                        .toLocalDate()
+                    val dayIndex = ChronoUnit.DAYS.between(firstDay, completedDate).toInt()
+                    if (dayIndex in weeklyCounts.indices) weeklyCounts[dayIndex]++
+                }
+            } else {
+                activeCount++
+            }
+        }
+
+        val weeklyCompletion = weeklyCounts.mapIndexed { index, count ->
+            val date = firstDay.plusDays(index.toLong())
+            DayCompletion(
+                label = WEEKDAY_LABELS.getValue(date.dayOfWeek),
+                count = count,
+            )
+        }
+        return TaskSummary(activeCount, completedCount, weeklyCompletion)
+    }
+
     companion object {
+        private val TASK_COMPARATOR = compareBy<TaskEntity> { it.isCompleted }
+            .thenByDescending { it.priority.ordinal }
+            .thenBy { it.dueAt ?: Long.MAX_VALUE }
+            .thenBy { it.sortOrder }
+
+        private val WEEKDAY_LABELS = mapOf(
+            java.time.DayOfWeek.SATURDAY to "ش",
+            java.time.DayOfWeek.SUNDAY to "ی",
+            java.time.DayOfWeek.MONDAY to "د",
+            java.time.DayOfWeek.TUESDAY to "س",
+            java.time.DayOfWeek.WEDNESDAY to "چ",
+            java.time.DayOfWeek.THURSDAY to "پ",
+            java.time.DayOfWeek.FRIDAY to "ج",
+        )
+
         private val QUOTES = listOf(
             DailyQuote("انجام دادنِ کم، بهتر از برنامه‌ریزیِ بی‌پایان است.", "کارینو"),
             DailyQuote("روی کار بعدی تمرکز کن؛ نه روی تمام مسیر.", "کارینو"),

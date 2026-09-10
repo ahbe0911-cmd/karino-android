@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,10 @@ fun TasksScreen(
     onDeleteTask: (TaskEntity) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val categoriesById = remember(state.categories) {
+        state.categories.associateBy { it.id }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -127,11 +132,10 @@ fun TasksScreen(
                 items(state.tasks, key = TaskEntity::id) { task ->
                     TaskCard(
                         task = task,
-                        category = state.categories.firstOrNull { it.id == task.categoryId },
+                        category = task.categoryId?.let { categoriesById[it] },
                         onCheckedChange = { onCheckTask(task, it) },
                         onEdit = { onEditTask(task) },
                         onDelete = { onDeleteTask(task) },
-                        modifier = Modifier.animateItem(),
                     )
                 }
             }

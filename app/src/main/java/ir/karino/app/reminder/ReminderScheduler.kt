@@ -13,9 +13,11 @@ import javax.inject.Singleton
 
 @Singleton
 class ReminderScheduler @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
 ) {
-    private val workManager = WorkManager.getInstance(context)
+    private val workManager: WorkManager by lazy {
+        WorkManager.getInstance(context)
+    }
 
     fun schedule(task: TaskEntity) {
         val reminderAt = task.reminderAt
