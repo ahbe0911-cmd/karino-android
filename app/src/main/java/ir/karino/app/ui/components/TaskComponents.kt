@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,11 +16,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Repeat
@@ -32,6 +36,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ir.karino.app.data.local.CategoryEntity
@@ -82,6 +88,82 @@ fun CategorySelector(
                     )
                 },
             )
+        }
+    }
+}
+
+@Composable
+fun CompactCategoryMenu(
+    categories: List<CategoryEntity>,
+    selectedCategoryId: Long?,
+    onSelected: (Long?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedCategory = categories.firstOrNull { it.id == selectedCategoryId }
+
+    Box(modifier = modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.height(40.dp),
+            shape = RoundedCornerShape(13.dp),
+            contentPadding = PaddingValues(horizontal = 11.dp),
+        ) {
+            selectedCategory?.let {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .background(Color(it.colorArgb), CircleShape),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text = selectedCategory?.name ?: "همه",
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.width(3.dp))
+            Icon(
+                imageVector = Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp),
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("همهٔ دسته‌ها") },
+                trailingIcon = if (selectedCategoryId == null) {
+                    { Icon(Icons.Outlined.Check, contentDescription = null) }
+                } else null,
+                onClick = {
+                    expanded = false
+                    onSelected(null)
+                },
+            )
+            categories.forEach { category ->
+                DropdownMenuItem(
+                    text = { Text(category.name) },
+                    leadingIcon = {
+                        Box(
+                            Modifier
+                                .size(9.dp)
+                                .background(Color(category.colorArgb), CircleShape),
+                        )
+                    },
+                    trailingIcon = if (selectedCategoryId == category.id) {
+                        { Icon(Icons.Outlined.Check, contentDescription = null) }
+                    } else null,
+                    onClick = {
+                        expanded = false
+                        onSelected(category.id)
+                    },
+                )
+            }
         }
     }
 }
@@ -239,13 +321,13 @@ fun EmptyTasks(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 42.dp),
+            .padding(horizontal = 24.dp, vertical = 26.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
             imageVector = Icons.Outlined.Inbox,
             contentDescription = null,
-            modifier = Modifier.size(54.dp),
+            modifier = Modifier.size(44.dp),
             tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
         )
         Spacer(Modifier.height(12.dp))
@@ -255,6 +337,7 @@ fun EmptyTasks(
             subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }

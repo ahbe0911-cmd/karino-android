@@ -33,7 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import ir.karino.app.data.local.TaskEntity
 import ir.karino.app.ui.KarinoUiState
-import ir.karino.app.ui.components.CategorySelector
+import ir.karino.app.ui.components.CompactCategoryMenu
 import ir.karino.app.ui.components.EmptyTasks
 import ir.karino.app.ui.components.TaskCard
 import ir.karino.app.ui.theme.Navy
@@ -54,12 +54,12 @@ fun HomeScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 18.dp,
-            end = 18.dp,
-            top = 18.dp,
+            start = 16.dp,
+            end = 16.dp,
+            top = 14.dp,
             bottom = 104.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
             Row(
@@ -68,8 +68,8 @@ fun HomeScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(13.dp))
                         .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -79,7 +79,7 @@ fun HomeScreen(
                         tint = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
-                Column(Modifier.padding(horizontal = 12.dp)) {
+                Column(Modifier.padding(horizontal = 10.dp)) {
                     Text("کارینو", style = MaterialTheme.typography.titleLarge)
                     Text(
                         "کارهای امروز، ساده و روشن",
@@ -100,26 +100,29 @@ fun HomeScreen(
         if (state.settings.showDailyQuote) {
             item {
                 Card(
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                     ),
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
                             Icons.Outlined.FormatQuote,
                             contentDescription = null,
+                            modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.primary,
                         )
-                        Column(Modifier.padding(horizontal = 10.dp)) {
+                        Column(Modifier.padding(horizontal = 8.dp)) {
                             Text(
                                 state.dailyQuote.text,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 3,
                             )
                             Text(
-                                state.dailyQuote.author,
+                                "— ${state.dailyQuote.author}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -130,35 +133,38 @@ fun HomeScreen(
         }
 
         item {
-            CategorySelector(
-                categories = state.categories,
-                selectedCategoryId = state.selectedCategoryId,
-                onSelected = onCategorySelected,
-            )
-        }
-
-        item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp),
+                    .padding(top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "فهرست امروز",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    "${state.tasks.size} کار".toPersianDigits(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "فهرست امروز",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "${state.tasks.size} کار برای امروز".toPersianDigits(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                CompactCategoryMenu(
+                    categories = state.categories,
+                    selectedCategoryId = state.selectedCategoryId,
+                    onSelected = onCategorySelected,
                 )
             }
         }
 
         if (state.tasks.isEmpty()) {
-            item { EmptyTasks() }
+            item {
+                EmptyTasks(
+                    title = "امروز هنوز کاری نداری",
+                    subtitle = "با یک قدم کوچک شروع کن؛ دکمهٔ + همین نزدیکی است.",
+                )
+            }
         } else {
             items(state.tasks, key = TaskEntity::id) { task ->
                 TaskCard(
@@ -189,7 +195,7 @@ private fun TodayHero(total: Int, done: Int) {
     val progress = if (total == 0) 0f else done.toFloat() / total
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) {
         Row(
@@ -199,16 +205,16 @@ private fun TodayHero(total: Int, done: Int) {
                         listOf(Navy, TealPrimary),
                     ),
                 )
-                .padding(horizontal = 20.dp, vertical = 22.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     "${weekdays.getValue(today.dayOfWeek)}، ${JalaliDate.today().format()}",
                     color = Color.White.copy(alpha = 0.78f),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                 )
-                Spacer(Modifier.height(7.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
                     when {
                         total == 0 -> "روز خلوتی داری"
@@ -216,16 +222,16 @@ private fun TodayHero(total: Int, done: Int) {
                         else -> "${total - done} کار باقی مانده".toPersianDigits()
                     },
                     color = Color.White,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                 )
             }
             Box(contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(
                     progress = { progress },
-                    modifier = Modifier.size(66.dp),
+                    modifier = Modifier.size(52.dp),
                     color = MaterialTheme.colorScheme.tertiary,
                     trackColor = Color.White.copy(alpha = 0.18f),
-                    strokeWidth = 7.dp,
+                    strokeWidth = 5.dp,
                 )
                 Text(
                     "$done/$total".toPersianDigits(),

@@ -17,11 +17,11 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -184,7 +184,7 @@ private fun KarinoScaffold(
         },
         floatingActionButton = {
             if (section == RootSection.HOME || section == RootSection.TASKS) {
-                FloatingActionButton(onClick = ::openNewTask) {
+                SmallFloatingActionButton(onClick = ::openNewTask) {
                     Icon(Icons.Filled.Add, contentDescription = "افزودن کار")
                 }
             }
