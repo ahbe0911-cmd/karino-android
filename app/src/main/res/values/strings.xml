@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">کارینو</string>
+    <string name="notification_channel_name">یادآور کارها</string>
+    <string name="notification_channel_description">یادآوری کارهای زمان‌بندی‌شده در کارینو</string>
+</resources>
