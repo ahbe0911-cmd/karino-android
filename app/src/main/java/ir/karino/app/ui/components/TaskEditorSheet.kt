@@ -1,5 +1,6 @@
 package ir.karino.app.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -15,13 +17,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import ir.karino.app.data.local.CategoryEntity
 import ir.karino.app.data.local.TaskEntity
 import ir.karino.app.domain.model.RepeatRule
 import ir.karino.app.domain.model.TaskDraft
@@ -55,14 +59,13 @@ import java.time.ZoneId
 @Composable
 fun TaskEditorSheet(
     task: TaskEntity?,
-    categories: List<CategoryEntity>,
     onDismiss: () -> Unit,
     onSave: (TaskDraft) -> Unit,
+    onDelete: (() -> Unit)?,
     onReminderPermissionNeeded: () -> Unit,
 ) {
     var title by remember(task?.id) { mutableStateOf(task?.title.orEmpty()) }
     var note by remember(task?.id) { mutableStateOf(task?.note.orEmpty()) }
-    var categoryId by remember(task?.id) { mutableStateOf(task?.categoryId) }
     var priority by remember(task?.id) { mutableStateOf(task?.priority ?: TaskPriority.NORMAL) }
     var dueAt by remember(task?.id) { mutableStateOf(task?.dueAt) }
     var reminderEnabled by remember(task?.id) { mutableStateOf(task?.reminderAt != null) }
@@ -80,203 +83,234 @@ fun TaskEditorSheet(
         )
     }
     var repeatRule by remember(task?.id) { mutableStateOf(task?.repeatRule ?: RepeatRule.NONE) }
+    var showAdvanced by remember(task?.id) {
+        mutableStateOf(
+            task?.dueAt != null ||
+                task?.priority != null && task.priority != TaskPriority.NORMAL ||
+                task?.repeatRule != null && task.repeatRule != RepeatRule.NONE,
+        )
+    }
     var showDateDialog by remember { mutableStateOf(false) }
     var titleError by remember { mutableStateOf(false) }
     var scheduleError by remember { mutableStateOf<String?>(null) }
+    val contentScroll = rememberScrollState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = null,
+        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
+                .heightIn(max = 720.dp)
+                .imePadding(),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (task == null) "کار تازه" else "ویرایش کار",
+                    text = if (task == null) "یادداشت تازه" else "ویرایش یادداشت",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
+                if (onDelete != null) {
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Outlined.DeleteOutline,
+                            contentDescription = "حذف یادداشت",
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Outlined.Close, contentDescription = "بستن")
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = title,
-                onValueChange = {
-                    title = it.take(180)
-                    if (it.isNotBlank()) titleError = false
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("عنوان کار") },
-                placeholder = { Text("مثلاً تماس با کتابخانه") },
-                singleLine = true,
-                isError = titleError,
-                supportingText = if (titleError) {
-                    { Text("عنوان کار را بنویسید.") }
-                } else null,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it.take(2_000) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("یادداشت (اختیاری)") },
-                minLines = 2,
-                maxLines = 4,
-            )
 
-            SectionTitle("دسته‌بندی")
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .weight(1f, fill = false)
+                    .verticalScroll(contentScroll)
+                    .padding(horizontal = 20.dp),
             ) {
-                FilterChip(
-                    selected = categoryId == null,
-                    onClick = { categoryId = null },
-                    label = { Text("بدون دسته") },
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = {
+                        title = it.take(180)
+                        if (it.isNotBlank()) titleError = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("عنوان") },
+                    placeholder = { Text("چه کاری باید انجام شود؟") },
+                    singleLine = true,
+                    isError = titleError,
+                    supportingText = if (titleError) {
+                        { Text("عنوان را بنویس.") }
+                    } else null,
                 )
-                categories.forEach { category ->
-                    FilterChip(
-                        selected = categoryId == category.id,
-                        onClick = { categoryId = category.id },
-                        label = { Text(category.name) },
-                    )
-                }
-            }
-
-            SectionTitle("اهمیت")
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TaskPriority.entries.forEach { item ->
-                    FilterChip(
-                        selected = priority == item,
-                        onClick = { priority = item },
-                        label = { Text(item.title) },
-                    )
-                }
-            }
-
-            SectionTitle("زمان‌بندی")
-            if (dueAt == null) {
-                OutlinedButton(
-                    onClick = { showDateDialog = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
-                    Text("  افزودن تاریخ و ساعت شمسی")
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedButton(
-                        onClick = { showDateDialog = true },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
-                        Text("  ${dueAt!!.formatJalaliDateTime()}")
-                    }
-                    IconButton(
-                        onClick = {
-                            dueAt = null
-                            reminderEnabled = false
-                            repeatRule = RepeatRule.NONE
-                            scheduleError = null
-                        },
-                    ) {
-                        Icon(Icons.Outlined.Close, contentDescription = "حذف زمان")
-                    }
-                }
                 Spacer(Modifier.height(8.dp))
-                Row(
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it.take(2_000) },
                     modifier = Modifier.fillMaxWidth(),
+                    label = { Text("یادداشت (اختیاری)") },
+                    minLines = 2,
+                    maxLines = 3,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdvanced = !showAdvanced }
+                        .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Text(
+                        text = "گزینه‌های بیشتر",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                     Icon(
-                        Icons.Outlined.NotificationsActive,
+                        imageVector = if (showAdvanced) {
+                            Icons.Outlined.ExpandLess
+                        } else {
+                            Icons.Outlined.ExpandMore
+                        },
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                     )
-                    Text(
-                        "یادآوری در زمان کار",
-                        modifier = Modifier
-                            .padding(horizontal = 10.dp)
-                            .weight(1f),
-                    )
-                    Switch(
-                        checked = reminderEnabled,
-                        onCheckedChange = {
-                            reminderEnabled = it
-                            scheduleError = null
-                        },
-                    )
                 }
-                if (reminderEnabled) {
+
+                if (showAdvanced) {
+                    SectionTitle("اهمیت")
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        REMINDER_OFFSETS.forEach { option ->
+                        TaskPriority.entries.forEach { item ->
                             FilterChip(
-                                selected = reminderOffsetMinutes == option.minutes,
-                                onClick = {
-                                    reminderOffsetMinutes = option.minutes
-                                    scheduleError = null
-                                },
-                                label = { Text(option.title) },
+                                selected = priority == item,
+                                onClick = { priority = item },
+                                label = { Text(item.title) },
                             )
                         }
                     }
-                }
-                Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.Repeat, contentDescription = null)
-                    RepeatRule.entries.forEach { item ->
-                        FilterChip(
-                            selected = repeatRule == item,
-                            onClick = { repeatRule = item },
-                            label = { Text(item.title) },
-                        )
+
+                    SectionTitle("زمان‌بندی")
+                    if (dueAt == null) {
+                        OutlinedButton(
+                            onClick = { showDateDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
+                            Text("  افزودن تاریخ و ساعت")
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedButton(
+                                onClick = { showDateDialog = true },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
+                                Text("  " + dueAt!!.formatJalaliDateTime())
+                            }
+                            IconButton(
+                                onClick = {
+                                    dueAt = null
+                                    reminderEnabled = false
+                                    repeatRule = RepeatRule.NONE
+                                    scheduleError = null
+                                },
+                            ) {
+                                Icon(Icons.Outlined.Close, contentDescription = "حذف زمان")
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Outlined.NotificationsActive,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = "یادآور",
+                                modifier = Modifier
+                                    .padding(horizontal = 10.dp)
+                                    .weight(1f),
+                            )
+                            Switch(
+                                checked = reminderEnabled,
+                                onCheckedChange = {
+                                    reminderEnabled = it
+                                    scheduleError = null
+                                },
+                            )
+                        }
+                        if (reminderEnabled) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                REMINDER_OFFSETS.forEach { option ->
+                                    FilterChip(
+                                        selected = reminderOffsetMinutes == option.minutes,
+                                        onClick = {
+                                            reminderOffsetMinutes = option.minutes
+                                            scheduleError = null
+                                        },
+                                        label = { Text(option.title) },
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Outlined.Repeat, contentDescription = null)
+                            RepeatRule.entries.forEach { item ->
+                                FilterChip(
+                                    selected = repeatRule == item,
+                                    onClick = { repeatRule = item },
+                                    label = { Text(item.title) },
+                                )
+                            }
+                        }
                     }
                 }
+
+                scheduleError?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
 
-            scheduleError?.let {
-                Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 10.dp),
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
                     if (title.isBlank()) {
@@ -290,6 +324,7 @@ fun TaskEditorSheet(
                     }
                     if (reminderAt != null && reminderAt <= System.currentTimeMillis()) {
                         scheduleError = "زمان یادآوری باید در آینده باشد."
+                        showAdvanced = true
                         return@Button
                     }
                     if (reminderEnabled) onReminderPermissionNeeded()
@@ -298,7 +333,7 @@ fun TaskEditorSheet(
                             id = task?.id ?: 0,
                             title = title,
                             note = note,
-                            categoryId = categoryId,
+                            categoryId = null,
                             priority = priority,
                             dueAt = dueAt,
                             reminderAt = reminderAt,
@@ -306,9 +341,11 @@ fun TaskEditorSheet(
                         ),
                     )
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 20.dp),
             ) {
-                Text(if (task == null) "ذخیرهٔ کار" else "ذخیرهٔ تغییرات")
+                Text(if (task == null) "ثبت یادداشت" else "ذخیرهٔ تغییرات")
             }
         }
     }
