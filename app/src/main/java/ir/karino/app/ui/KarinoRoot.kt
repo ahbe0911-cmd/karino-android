@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -168,7 +168,7 @@ private fun KarinoScaffold(
                         icon = {
                             Icon(
                                 imageVector = when (item) {
-                                    RootSection.NOTES -> Icons.Outlined.Notes
+                                    RootSection.NOTES -> Icons.AutoMirrored.Outlined.Notes
                                     RootSection.SETTINGS -> Icons.Outlined.Settings
                                 },
                                 contentDescription = item.title,
